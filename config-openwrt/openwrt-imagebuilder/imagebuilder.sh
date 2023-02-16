@@ -112,13 +112,15 @@ custom_packages() {
     #
     amlogic_file="luci-app-amlogic"
     amlogic_file_down="$(curl -s ${amlogic_api} | grep "browser_download_url" | grep -oE "https.*${amlogic_name}.*.ipk" | head -n 1)"
-    wget -q ${amlogic_file_down} -O packages/${amlogic_file_down##*/}
-    [[ "${?}" -eq "0" ]] && echo -e "${INFO} The [ ${amlogic_file} ] is downloaded successfully."
+    wget ${amlogic_file_down} -q -P packages
+    [[ "${?}" -eq "0" ]] || error_msg "[ ${amlogic_file} ] download failed!"
+    echo -e "${INFO} The [ ${amlogic_file} ] is downloaded successfully."
     #
     amlogic_i18n="luci-i18n-amlogic"
     amlogic_i18n_down="$(curl -s ${amlogic_api} | grep "browser_download_url" | grep -oE "https.*${amlogic_i18n}.*.ipk" | head -n 1)"
-    wget -q ${amlogic_i18n_down} -O packages/${amlogic_i18n_down##*/}
-    [[ "${?}" -eq "0" ]] && echo -e "${INFO} The [ ${amlogic_i18n} ] is downloaded successfully."
+    wget ${amlogic_i18n_down} -q -P packages
+    [[ "${?}" -eq "0" ]] || error_msg "[ ${amlogic_i18n} ] download failed!"
+    echo -e "${INFO} The [ ${amlogic_i18n} ] is downloaded successfully."
 
     # Download other luci-app-xxx
     # ......
@@ -175,12 +177,12 @@ rebuild_firmware() {
         f2fs-tools f2fsck fdisk gawk getopt gzip hostapd-common iconv iw iwinfo jq jshn \
         kmod-brcmfmac kmod-brcmutil kmod-cfg80211 kmod-mac80211 libjson-script \
         liblucihttp liblucihttp-lua libnetwork losetup lsattr lsblk lscpu mkf2fs \
-        mount-utils ntfs3-mount openssl-util parted perl-http-date perlbase-file \
-        perlbase-getopt perlbase-time perlbase-unicode perlbase-utf8 pigz ppp \
-        ppp-mod-pppoe proto-bonding pv rename resize2fs runc subversion-client \
-        subversion-libs tar tini ttyd tune2fs uclient-fetch uhttpd uhttpd-mod-ubus unzip \
-        uqmi usb-modeswitch uuidgen wget-ssl whereis which wpa-cli wpad-basic wwan \
-        xfs-fsck xfs-mkfs xz xz-utils ziptool zoneinfo-asia zoneinfo-core zstd \
+        mount-utils openssl-util parted perl-http-date perlbase-file perlbase-getopt \
+        perlbase-time perlbase-unicode perlbase-utf8 pigz ppp ppp-mod-pppoe \
+        proto-bonding pv rename resize2fs runc subversion-client subversion-libs tar \
+        tini ttyd tune2fs uclient-fetch uhttpd uhttpd-mod-ubus unzip uqmi usb-modeswitch \
+        uuidgen wget-ssl whereis which wpa-cli wpad-basic wwan xfs-fsck xfs-mkfs xz \
+        xz-utils ziptool zoneinfo-asia zoneinfo-core zstd \
         \
         luci luci-base luci-compat luci-i18n-base-en luci-i18n-base-zh-cn luci-lib-base  \
         luci-lib-docker luci-lib-ip luci-lib-ipkg luci-lib-jsonc luci-lib-nixio  \
