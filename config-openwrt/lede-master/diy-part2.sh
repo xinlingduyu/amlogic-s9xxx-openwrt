@@ -3,7 +3,7 @@
 # https://github.com/ophub/amlogic-s9xxx-openwrt
 # Description: Automatically Build OpenWrt for Amlogic s9xxx tv box
 # Function: Diy script (After Update feeds, Modify the default IP, hostname, theme, add/remove software packages, etc.)
-# Source code repository: https://github.com/coolsnowwolf/lede / Branch: master
+# Source code repository: https://github.com/Lienol/openwrt / Branch: 22.03
 #========================================================================================================================
 
 # ------------------------------- Main source started -------------------------------
