@@ -68,17 +68,17 @@ op_release="etc/flippy-openwrt-release"
 
 # Dependency files download repository
 depends_repo="https://github.com/ophub/amlogic-s9xxx-armbian/tree/main/build-armbian"
-# Convert depends library address to svn format
+# Convert depends repository address to svn format
 depends_repo="${depends_repo//tree\/main/trunk}"
 
 # Firmware files download repository
 firmware_repo="https://github.com/ophub/firmware/tree/main/firmware"
-# Convert firmware library address to svn format
+# Convert firmware repository address to svn format
 firmware_repo="${firmware_repo//tree\/main/trunk}"
 
 # Install/Update script files download repository
 script_repo="https://github.com/ophub/luci-app-amlogic/tree/main/luci-app-amlogic/root/usr/sbin"
-# Convert script library address to svn format
+# Convert script repository address to svn format
 script_repo="${script_repo//tree\/main/trunk}"
 
 # Set the kernel download repository from github.com
@@ -86,7 +86,6 @@ kernel_repo="ophub/kernel"
 # Set the list of kernels used by default
 stable_kernel=("6.1.1" "5.15.1")
 rk3588_kernel=("5.10.1")
-h6_kernel=("6.1.1")
 # Set to automatically use the latest kernel
 auto_kernel="true"
 
@@ -192,9 +191,11 @@ init_var() {
         shift
     done
 
-    # Get the list of devices built by default
+    # Columns of ${model_conf}:
     # 1.ID  2.MODEL  3.SOC  4.FDTFILE  5.UBOOT_OVERLOAD  6.MAINLINE_UBOOT  7.BOOTLOADER_IMG  8.DESCRIPTION
-    # 9.KERNEL_BRANCH  10.PLATFORM  11.FAMILY  12.BOOT_CONF  13.BOARD  14.BUILD
+    # 9.KERNEL_TAGS  10.PLATFORM  11.FAMILY  12.BOOT_CONF  13.BOARD  14.BUILD
+
+    # Get a list of build devices
     if [[ "${make_board}" == "all" ]]; then
         board_list=""
         make_openwrt=($(
@@ -209,26 +210,26 @@ init_var() {
     fi
     [[ "${#make_openwrt[*]}" -eq "0" ]] && error_msg "The board is missing, stop making."
 
-    # In KERNEL_BRANCH, query the [ kernel directory ] and [ specific kernel ]
+    # Get a list of kernel
     kernel_from=($(
         cat ${model_conf} |
             sed -e 's/NA//g' -e 's/NULL//g' -e 's/[ ][ ]*//g' -e 's/\.y/\.1/g' |
             grep -E "^[^#].*${board_list}:yes$" | awk -F':' '{print $9}' |
             sort | uniq | xargs
     ))
-    [[ "${#kernel_from[*]}" -eq "0" ]] && error_msg "Missing [ KERNEL_BRANCH ] settings, stop building."
+    [[ "${#kernel_from[*]}" -eq "0" ]] && error_msg "Missing [ KERNEL_TAGS ] settings, stop building."
 
-    # In KERNEL_BRANCH, query the [ specified kernel ], Start with the [ number ], such as 5.15.y, 6.1.y, etc.
+    # The [ specified kernel ], Use the [ kernel version number ], such as 5.15.y, 6.1.y, etc. download from [ kernel_stable ].
     specify_kernel=($(echo ${kernel_from[*]} | sed -e 's/[ ][ ]*/\n/g' | grep -E "^[0-9]+" | sort | uniq | xargs))
 
-    # In KERNEL_BRANCH, the [ kernel directory ], Start with the [ letter ], such as stable, rk3588, h6, etc.
-    kernel_dir=($(echo ${kernel_from[*]} | sed -e 's/[ ][ ]*/\n/g' | grep -E "^[a-z]" | sort | uniq | xargs))
-    # Add the specified kernel directory
-    [[ "${#specify_kernel[*]}" -ne "0" ]] && kernel_dir=(${kernel_dir[*]} "specify")
-    # Check the kernel directory
-    [[ "${#kernel_dir[*]}" -eq "0" ]] && error_msg "The [ kernel_dir ] is missing, stop building."
+    # The [ suffix ] of KERNEL_TAGS starts with a [ letter ], such as kernel_stable, kernel_rk3588, etc.
+    tags_list=($(echo ${kernel_from[*]} | sed -e 's/[ ][ ]*/\n/g' | grep -E "^[a-z]" | sort | uniq | xargs))
+    # Add the specified kernel to the list
+    [[ "${#specify_kernel[*]}" -ne "0" ]] && tags_list=(${tags_list[*]} "specify")
+    # Check the kernel list
+    [[ "${#tags_list[*]}" -eq "0" ]] && error_msg "The [ tags_list ] is missing, stop building."
 
-    # Convert kernel library address to api format
+    # Convert kernel repository address to api format
     [[ "${kernel_repo}" =~ ^https: ]] && kernel_repo="$(echo ${kernel_repo} | awk -F'/' '{print $4"/"$5}')"
     kernel_api="https://api.github.com/repos/${kernel_repo}"
 }
@@ -304,18 +305,16 @@ download_depends() {
 }
 
 query_version() {
-    echo -e "${STEPS} Start querying the latest kernel version for [ $(echo ${kernel_dir[*]} | xargs) ]..."
+    echo -e "${STEPS} Start querying the latest kernel version for [ $(echo ${tags_list[*]} | xargs) ]..."
 
-    # Check the version on the kernel library
+    # Check the version on the kernel repository
     x="1"
-    for k in ${kernel_dir[*]}; do
+    for k in ${tags_list[*]}; do
         {
             # Select the corresponding kernel directory and list
             kd="${k}"
             if [[ "${k}" == "rk3588" ]]; then
                 down_kernel_list=(${rk3588_kernel[*]})
-            elif [[ "${k}" == "h6" ]]; then
-                down_kernel_list=(${h6_kernel[*]})
             elif [[ "${k}" == "specify" ]]; then
                 kd="stable"
                 down_kernel_list=(${specify_kernel[*]})
@@ -370,9 +369,6 @@ query_version() {
             if [[ "${k}" == "rk3588" ]]; then
                 unset rk3588_kernel
                 rk3588_kernel=(${tmp_arr_kernels[*]})
-            elif [[ "${k}" == "h6" ]]; then
-                unset h6_kernel
-                h6_kernel=(${tmp_arr_kernels[*]})
             elif [[ "${k}" == "specify" ]]; then
                 unset specify_kernel
                 specify_kernel=(${tmp_arr_kernels[*]})
@@ -404,17 +400,15 @@ check_kernel() {
 
 download_kernel() {
     cd ${current_path}
-    echo -e "${STEPS} Start downloading the kernel files for [ $(echo ${kernel_dir[*]} | xargs) ]..."
+    echo -e "${STEPS} Start downloading the kernel files for [ $(echo ${tags_list[*]} | xargs) ]..."
 
     x="1"
-    for k in ${kernel_dir[*]}; do
+    for k in ${tags_list[*]}; do
         {
             # Set the kernel download list
             kd="${k}"
             if [[ "${k}" == "rk3588" ]]; then
                 down_kernel_list=(${rk3588_kernel[*]})
-            elif [[ "${k}" == "h6" ]]; then
-                down_kernel_list=(${h6_kernel[*]})
             elif [[ "${k}" == "specify" ]]; then
                 down_kernel_list=(${specify_kernel[*]})
                 kd="stable"
@@ -457,6 +451,11 @@ download_kernel() {
 confirm_version() {
     cd ${current_path}
 
+    # Columns of ${model_conf}:
+    # 1.ID  2.MODEL  3.SOC  4.FDTFILE  5.UBOOT_OVERLOAD  6.MAINLINE_UBOOT  7.BOOTLOADER_IMG  8.DESCRIPTION
+    # 9.KERNEL_TAGS  10.PLATFORM  11.FAMILY  12.BOOT_CONF  13.BOARD  14.BUILD
+    # Column 5, called <UBOOT_OVERLOAD> in Amlogic, <TRUST_IMG> in Rockchip, Not used in Allwinner.
+
     # Find [ the first ] configuration information with [ the same BOARD name ] and [ BUILD as yes ] in the ${model_conf} file.
     [[ -f "${model_conf}" ]] || error_msg "[ ${model_conf} ] file is missing!"
     board_conf="$(
@@ -467,16 +466,14 @@ confirm_version() {
     )"
     [[ -n "${board_conf}" ]] || error_msg "[ ${board} ] config is missing!"
 
-    # 1.ID  2.MODEL  3.SOC  4.FDTFILE  5.UBOOT_OVERLOAD  6.MAINLINE_UBOOT  7.BOOTLOADER_IMG  8.DESCRIPTION
-    # 9.KERNEL_BRANCH  10.PLATFORM  11.FAMILY  12.BOOT_CONF  13.BOARD  14.BUILD
-    # Column 5, called <UBOOT_OVERLOAD> in Amlogic, <TRUST_IMG> in Rockchip, Not used in Allwinner.
+    # Get device settings options
     SOC="$(echo ${board_conf} | awk -F':' '{print $3}')"
     FDTFILE="$(echo ${board_conf} | awk -F':' '{print $4}')"
     UBOOT_OVERLOAD="$(echo ${board_conf} | awk -F':' '{print $5}')"
     TRUST_IMG="${UBOOT_OVERLOAD}"
     MAINLINE_UBOOT="$(echo ${board_conf} | awk -F':' '{print $6}')" && MAINLINE_UBOOT="${MAINLINE_UBOOT##*/}"
     BOOTLOADER_IMG="$(echo ${board_conf} | awk -F':' '{print $7}')" && BOOTLOADER_IMG="${BOOTLOADER_IMG##*/}"
-    KERNEL_BRANCH="$(echo ${board_conf} | awk -F':' '{print $9}')"
+    KERNEL_TAGS="$(echo ${board_conf} | awk -F':' '{print $9}')"
     PLATFORM="$(echo ${board_conf} | awk -F':' '{print $10}')"
     FAMILY="$(echo ${board_conf} | awk -F':' '{print $11}')"
     BOOT_CONF="$(echo ${board_conf} | awk -F':' '{print $12}')"
@@ -745,15 +742,6 @@ refactor_rootfs() {
     sed -i "s|LABEL=ROOTFS|UUID=${ROOTFS_UUID}|g" etc/fstab
     sed -i "s|option label 'ROOTFS'|option uuid '${ROOTFS_UUID}'|g" etc/config/fstab
 
-    # Edit Kernel download directory
-    [[ -f "etc/config/amlogic" ]] && {
-        if [[ "${KERNEL_BRANCH}" == "rk3588" ]]; then
-            sed -i "s|pub\/stable|pub\/rk3588|g" etc/config/amlogic
-        elif [[ "${KERNEL_BRANCH}" == "h6" ]]; then
-            sed -i "s|pub\/stable|pub\/h6|g" etc/config/amlogic
-        fi
-    }
-
     # Modify the default script to [ bash ] for [ cpustat ]
     [[ -x "bin/bash" ]] && {
         sed -i "s/\/bin\/ash/\/bin\/bash/" etc/passwd
@@ -859,7 +847,7 @@ EOF
 
     # Get random macaddr
     mac_hexchars="0123456789ABCDEF"
-    mac_end="$(for i in {1..6}; do echo -n ${mac_hexchars:$((${RANDOM} % 16)):1}; done | sed -e 's/\(..\)/:\1/g')"
+    mac_end=$(for i in {1..6}; do echo -n ${mac_hexchars:$((${RANDOM} % 16)):1}; done | sed -e 's/\(..\)/:\1/g')
     random_macaddr="9E:62${mac_end}"
 
     # Optimize wifi/bluetooth module
@@ -882,6 +870,8 @@ EOF
         sed -e "s/macaddr=.*/macaddr=${random_macaddr}:06/" "brcmfmac43456-sdio.txt" >"brcmfmac43456-sdio.amlogic,sm1.txt"
         # x96max plus v5.1 (ip1001m phy) adopts am7256 (brcm4354)
         sed -e "s/macaddr=.*/macaddr=${random_macaddr}:07/" "brcmfmac4354-sdio.txt" >"brcmfmac4354-sdio.amlogic,sm1.txt"
+        # ct2000 s922x is brm4359
+        sed -i "s/macaddr=.*/macaddr=${random_macaddr}:08/" "brcmfmac4359-sdio.ali,ct2000.txt"
     )
 
     # Add firmware version information to the terminal page
@@ -900,7 +890,7 @@ EOF
     echo "FAMILY='${FAMILY}'" >>${op_release}
     echo "BOARD='${board}'" >>${op_release}
     echo "KERNEL_VERSION='${kernel}'" >>${op_release}
-    echo "KERNEL_BRANCH='${KERNEL_BRANCH}'" >>${op_release}
+    echo "KERNEL_TAGS='${KERNEL_TAGS}'" >>${op_release}
     echo "BOOT_CONF='${BOOT_CONF}'" >>${op_release}
     echo "PACKAGED_DATE='$(date +%Y-%m-%d)'" >>${op_release}
     echo "MAINLINE_UBOOT='/lib/u-boot/${MAINLINE_UBOOT}'" >>${op_release}
@@ -965,12 +955,10 @@ loop_make() {
             confirm_version
 
             # Determine kernel branch
-            kd="${KERNEL_BRANCH}"
-            if [[ "${KERNEL_BRANCH}" == "rk3588" ]]; then
+            kd="${KERNEL_TAGS}"
+            if [[ "${KERNEL_TAGS}" == "rk3588" ]]; then
                 kernel_list=(${rk3588_kernel[*]})
-            elif [[ "${KERNEL_BRANCH}" == "h6" ]]; then
-                kernel_list=(${h6_kernel[*]})
-            elif [[ "${KERNEL_BRANCH}" =~ ^[0-9]{1,2}\.[0-9]+ ]]; then
+            elif [[ "${KERNEL_TAGS}" =~ ^[0-9]{1,2}\.[0-9]+ ]]; then
                 kernel_list=(${specify_kernel[*]})
                 kd="stable"
             else
@@ -983,8 +971,8 @@ loop_make() {
                     kernel="${k}"
 
                     # Skip inapplicable kernels
-                    if [[ "${KERNEL_BRANCH}" =~ ^[0-9]{1,2}\.[0-9]+ ]]; then
-                        [[ "${kernel}" != "$(echo ${KERNEL_BRANCH} | awk -F'.' '{print $1"."$2"."}')"* ]] && {
+                    if [[ "${KERNEL_TAGS}" =~ ^[0-9]{1,2}\.[0-9]+ ]]; then
+                        [[ "${kernel}" != "$(echo ${KERNEL_TAGS} | awk -F'.' '{print $1"."$2"."}')"* ]] && {
                             echo -e "(${j}.${i}) ${TIPS} The [ ${board} ] device cannot use [ ${kd}/${kernel} ] kernel, skip."
                             let i++
                             continue
