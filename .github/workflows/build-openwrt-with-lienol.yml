@@ -86,8 +86,8 @@ on:
           - breakings/OpenWrt
 
 env:
-  REPO_URL: https://github.com/openwrt/openwrt
-  REPO_BRANCH: master
+  REPO_URL: https://github.com/Lienol/openwrt
+  REPO_BRANCH: 22.03
   FEEDS_CONF: config-openwrt/openwrt-master/feeds.conf.default
   CONFIG_FILE: config-openwrt/openwrt-master/config
   DIY_P1_SH: config-openwrt/openwrt-master/diy-part1.sh
